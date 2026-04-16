@@ -139,7 +139,7 @@ int ossl_asn1_time_to_tm(struct tm *tm, const ASN1_TIME *d)
             tmp.tm_year = n * 100 - 1900;
             break;
         case 1:
-            if (d->type == V_ASN1_UTCTIME)
+            if (ASN1_STRING_type(d) == V_ASN1_UTCTIME)
                 tmp.tm_year = n < 50 ? n + 100 : n;
             else
                 tmp.tm_year += n;
@@ -367,18 +367,19 @@ int ASN1_TIME_set_string(ASN1_TIME *s, const char *str)
 
 int ASN1_TIME_set_string_X509(ASN1_TIME *s, const char *str)
 {
-    ASN1_TIME t;
+    ASN1_TIME *t = NULL;
     struct tm tm;
     size_t len;
+    int type, ret = 0;
 
     /* RFC 5280 4.1.2.5: Valid RFC5280 times must be either length 13 or 15. */
     len = strlen(str);
     switch (len) {
     case 13:
-        t.type = V_ASN1_UTCTIME;
+        type = V_ASN1_UTCTIME;
         break;
     case 15:
-        t.type = V_ASN1_GENERALIZEDTIME;
+        type = V_ASN1_GENERALIZEDTIME;
         break;
     default:
         return 0;
@@ -388,8 +389,11 @@ int ASN1_TIME_set_string_X509(ASN1_TIME *s, const char *str)
     if (str[len - 1] != 0x5A)
         return 0;
 
-    t.length = (int)len;
-    t.data = (unsigned char *)str;
+    if ((t = ASN1_STRING_type_new(type)) == NULL)
+        return 0;
+
+    if (!ASN1_STRING_set(t, str, (int)len))
+        goto err;
 
     /*
      * RFC 5280 Section 4.1.2.5 The following function is permissive
@@ -398,8 +402,8 @@ int ASN1_TIME_set_string_X509(ASN1_TIME *s, const char *str)
      * for the type, and anything not ending in a 'Z', Our time may
      * not be any of these other cases, and still parse as a time.
      */
-    if (!ossl_asn1_time_to_tm(&tm, &t))
-        return 0;
+    if (!ossl_asn1_time_to_tm(&tm, t))
+        goto err;
 
     if (s != NULL) {
         /*
@@ -410,12 +414,16 @@ int ASN1_TIME_set_string_X509(ASN1_TIME *s, const char *str)
          * start of the input string so the result is a UTC time.
          */
         if (is_utc(tm.tm_year) && len == 15)
-            return ASN1_TIME_set_string(s, str + 2);
-
-        return ASN1_TIME_set_string(s, str);
+            ret = ASN1_TIME_set_string(s, str + 2);
+        else
+            ret = ASN1_TIME_set_string(s, str);
+        goto err;
     }
 
-    return 1;
+    ret = 1;
+err:
+    ASN1_TIME_free(t);
+    return ret;
 }
 
 int ASN1_TIME_to_tm(const ASN1_TIME *s, struct tm *tm)
@@ -466,7 +474,7 @@ int ASN1_TIME_print_ex(BIO *bp, const ASN1_TIME *tm, unsigned long flags)
 /* returns 0 on BIO write error, else -1 in case of parse failure, else 1 */
 int ossl_asn1_time_print_ex(BIO *bp, const ASN1_TIME *tm, unsigned long flags)
 {
-    char *v;
+    const char *v;
     int l;
     struct tm stm;
     const char period = 0x2E;
@@ -476,10 +484,10 @@ int ossl_asn1_time_print_ex(BIO *bp, const ASN1_TIME *tm, unsigned long flags)
         return BIO_write(bp, "Bad time value", 14) ? -1 : 0;
 
     l = ASN1_STRING_length(tm);
-    v = (char *)ASN1_STRING_get0_data(tm);
+    v = (const char *)ASN1_STRING_get0_data(tm);
 
     if (ASN1_STRING_type(tm) == V_ASN1_GENERALIZEDTIME) {
-        char *f = NULL;
+        const char *f = NULL;
         int f_len = 0;
 
         /*

@@ -33,23 +33,29 @@ int ASN1_UTCTIME_check(const ASN1_UTCTIME *d)
 /* Sets the string via simple copy without cleaning it up */
 int ASN1_UTCTIME_set_string(ASN1_UTCTIME *s, const char *str)
 {
-    ASN1_UTCTIME t;
+    ASN1_UTCTIME *t = NULL;
     size_t len;
+    int ret = 0;
 
     if ((len = strlen(str)) >= INT_MAX)
         return 0;
-    t.type = V_ASN1_UTCTIME;
-    t.length = (int)len;
-    t.data = (unsigned char *)str;
-    t.flags = 0;
 
-    if (!ASN1_UTCTIME_check(&t))
+    if ((t = ASN1_STRING_type_new(V_ASN1_UTCTIME)) == NULL)
         return 0;
 
-    if (s != NULL && !ASN1_STRING_copy(s, &t))
-        return 0;
+    if (!ASN1_STRING_set(t, str, (int)len))
+        goto err;
 
-    return 1;
+    if (!ASN1_UTCTIME_check(t))
+        goto err;
+
+    if (s != NULL && !ASN1_STRING_copy(s, t))
+        goto err;
+
+    ret = 1;
+err:
+    ASN1_UTCTIME_free(t);
+    return ret;
 }
 
 ASN1_UTCTIME *ASN1_UTCTIME_set(ASN1_UTCTIME *s, time_t t)

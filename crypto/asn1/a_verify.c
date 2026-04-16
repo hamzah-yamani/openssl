@@ -43,7 +43,7 @@ int ASN1_verify(i2d_of_void *i2d, X509_ALGOR *a, ASN1_BIT_STRING *signature,
         goto err;
     }
 
-    if (signature->type == V_ASN1_BIT_STRING && signature->flags & 0x7) {
+    if (ASN1_STRING_type(signature) == V_ASN1_BIT_STRING && signature->flags & 0x7) {
         ERR_raise(ERR_LIB_ASN1, ASN1_R_INVALID_BIT_STRING_BITS_LEFT);
         goto err;
     }
@@ -112,7 +112,7 @@ static int item_verify(const ASN1_ITEM *it, const X509_ALGOR *alg,
         return -1;
     }
 
-    if (signature->type == V_ASN1_BIT_STRING && signature->flags & 0x7) {
+    if (ASN1_STRING_type(signature) == V_ASN1_BIT_STRING && signature->flags & 0x7) {
         ERR_raise(ERR_LIB_ASN1, ASN1_R_INVALID_BIT_STRING_BITS_LEFT);
         return -1;
     }

@@ -301,6 +301,7 @@ ASN1_INTEGER *ossl_c2i_ASN1_INTEGER(ASN1_INTEGER **a, const unsigned char **pp,
     long len)
 {
     ASN1_INTEGER *ret = NULL;
+    unsigned char *tmp = NULL;
     size_t r;
     int neg;
 
@@ -310,19 +311,24 @@ ASN1_INTEGER *ossl_c2i_ASN1_INTEGER(ASN1_INTEGER **a, const unsigned char **pp,
         return NULL;
 
     if ((a == NULL) || ((*a) == NULL)) {
-        ret = ASN1_INTEGER_new();
+        ret = ASN1_STRING_type_new(V_ASN1_INTEGER);
         if (ret == NULL)
             return NULL;
-        ret->type = V_ASN1_INTEGER;
     } else
         ret = *a;
 
-    if (r > INT_MAX || ASN1_STRING_set(ret, NULL, (int)r) == 0) {
+    if (r > INT_MAX) {
         ERR_raise(ERR_LIB_ASN1, ERR_R_ASN1_LIB);
         goto err;
     }
 
-    c2i_ibuf(ret->data, &neg, *pp, len);
+    tmp = OPENSSL_malloc(r);
+    if (tmp == NULL)
+        goto err;
+
+    c2i_ibuf(tmp, &neg, *pp, len);
+    ASN1_STRING_set0(ret, tmp, (int)r);
+    tmp = NULL;
 
     if (neg != 0)
         ret->type |= V_ASN1_NEG;
@@ -334,6 +340,7 @@ ASN1_INTEGER *ossl_c2i_ASN1_INTEGER(ASN1_INTEGER **a, const unsigned char **pp,
         (*a) = ret;
     return ret;
 err:
+    OPENSSL_free(tmp);
     if (a == NULL || *a != ret)
         ASN1_INTEGER_free(ret);
     return NULL;
@@ -421,9 +428,8 @@ ASN1_INTEGER *d2i_ASN1_UINTEGER(ASN1_INTEGER **a, const unsigned char **pp,
     int i = 0;
 
     if ((a == NULL) || ((*a) == NULL)) {
-        if ((ret = ASN1_INTEGER_new()) == NULL)
+        if ((ret = ASN1_STRING_type_new(V_ASN1_INTEGER)) == NULL)
             return NULL;
-        ret->type = V_ASN1_INTEGER;
     } else
         ret = (*a);
 
@@ -483,6 +489,7 @@ static ASN1_STRING *bn_to_asn1_string(const BIGNUM *bn, ASN1_STRING *ai,
     int atype)
 {
     ASN1_INTEGER *ret;
+    unsigned char *tmp = NULL;
     int len;
 
     if (ai == NULL) {
@@ -505,19 +512,18 @@ static ASN1_STRING *bn_to_asn1_string(const BIGNUM *bn, ASN1_STRING *ai,
     if (len == 0)
         len = 1;
 
-    if (ASN1_STRING_set(ret, NULL, len) == 0) {
-        ERR_raise(ERR_LIB_ASN1, ERR_R_ASN1_LIB);
+    tmp = OPENSSL_zalloc(len);
+    if (tmp == NULL)
         goto err;
-    }
 
-    /* Correct zero case */
-    if (BN_is_zero(bn))
-        ret->data[0] = 0;
-    else
-        len = BN_bn2bin(bn, ret->data);
-    ret->length = len;
+    /* Correct zero case: tmp is already zeroed by OPENSSL_zalloc */
+    if (!BN_is_zero(bn))
+        len = BN_bn2bin(bn, tmp);
+    ASN1_STRING_set0(ret, tmp, len);
+    tmp = NULL;
     return ret;
 err:
+    OPENSSL_free(tmp);
     if (ret != ai)
         ASN1_INTEGER_free(ret);
     return NULL;

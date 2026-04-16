@@ -96,7 +96,7 @@ ASN1_BIT_STRING *ossl_c2i_ASN1_BIT_STRING(ASN1_BIT_STRING **a,
     }
 
     if ((a == NULL) || ((*a) == NULL)) {
-        if ((ret = ASN1_BIT_STRING_new()) == NULL)
+        if ((ret = ASN1_STRING_type_new(V_ASN1_BIT_STRING)) == NULL)
             return NULL;
     } else
         ret = (*a);
@@ -125,7 +125,6 @@ ASN1_BIT_STRING *ossl_c2i_ASN1_BIT_STRING(ASN1_BIT_STRING **a,
         s = NULL;
 
     ASN1_STRING_set0(ret, s, (int)len);
-    ret->type = V_ASN1_BIT_STRING;
     if (a != NULL)
         (*a) = ret;
     *pp = p;
@@ -291,7 +290,6 @@ int ASN1_BIT_STRING_set1(ASN1_BIT_STRING *abs, const uint8_t *data, size_t lengt
 
     if (!ASN1_STRING_set(abs, data, (int)length))
         return 0;
-    abs->type = V_ASN1_BIT_STRING;
 
     return asn1_bit_string_set_unused_bits(abs, unused_bits);
 }

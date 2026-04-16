@@ -23,7 +23,7 @@ int i2a_ASN1_INTEGER(BIO *bp, const ASN1_INTEGER *a)
     if (a == NULL)
         return 0;
 
-    if (a->type & V_ASN1_NEG) {
+    if (ASN1_STRING_type(a) & V_ASN1_NEG) {
         if (BIO_write(bp, "-", 1) != 1)
             goto err;
         n = 1;
