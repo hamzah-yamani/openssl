@@ -868,61 +868,66 @@ static ASN1_TIME *make_asn1_time(const char *s, int type)
  *   - pairwise equality / ordering of today/tomorrow strings represented
  *     as both GENERALIZEDTIME and UTCTIME (they must compare as equal
  *     across representations),
- *   - the -2 error return for malformed ASN1_TIME inputs,
- *   - limit/unusual values using the min and max POSIX times.
+ *   - the -2 error return for a type-mismatched ASN1_TIME input,
+ *   - limit values using the minimum and maximum representable
+ *     GENERALIZED time.
  */
 static int test_asn1_time_compare(void)
 {
-    static const struct {
-        const char *s;
-        int type;
-    } vals[] = {
-        { TODAY_GEN_STR, V_ASN1_GENERALIZEDTIME },
-        { TODAY_UTC_STR, V_ASN1_UTCTIME },
-        { TOMORROW_GEN_STR, V_ASN1_GENERALIZEDTIME },
-        { TOMORROW_UTC_STR, V_ASN1_UTCTIME }
-    };
-    /*
-     * Expected result for ASN1_TIME_compare(times[i], times[j]).
-     * Indices 0,1 are "today" (GEN and UTC), 2,3 are "tomorrow".
-     */
-    static const int expected[4][4] = {
-        { 0, 0, -1, -1 },
-        { 0, 0, -1, -1 },
-        { 1, 1, 0, 0 },
-        { 1, 1, 0, 0 }
-    };
-    ASN1_TIME *times[4] = { NULL, NULL, NULL, NULL };
+    ASN1_TIME *today_gen = NULL, *today_utc = NULL;
+    ASN1_TIME *tomorrow_gen = NULL, *tomorrow_utc = NULL;
     ASN1_TIME *bad = NULL;
     ASN1_TIME *min = NULL, *max = NULL;
-    size_t i, j;
     int ret = 0;
 
-    for (i = 0; i < OSSL_NELEM(times); i++) {
-        if (!TEST_ptr(times[i] = make_asn1_time(vals[i].s, vals[i].type)))
-            goto err;
-    }
+    if (!TEST_ptr(today_gen = make_asn1_time(TODAY_GEN_STR, V_ASN1_GENERALIZEDTIME))
+        || !TEST_ptr(today_utc = make_asn1_time(TODAY_UTC_STR, V_ASN1_UTCTIME))
+        || !TEST_ptr(tomorrow_gen = make_asn1_time(TOMORROW_GEN_STR,
+                         V_ASN1_GENERALIZEDTIME))
+        || !TEST_ptr(tomorrow_utc = make_asn1_time(TOMORROW_UTC_STR,
+                         V_ASN1_UTCTIME)))
+        goto err;
 
-    for (i = 0; i < OSSL_NELEM(times); i++) {
-        for (j = 0; j < OSSL_NELEM(times); j++) {
-            if (!TEST_int_eq(ASN1_TIME_compare(times[i], times[j]),
-                    expected[i][j])) {
-                TEST_info("ASN1_TIME_compare(%s, %s) unexpected",
-                    vals[i].s, vals[j].s);
-                goto err;
-            }
-        }
-    }
+    /* today == today across both representations */
+    if (!TEST_int_eq(ASN1_TIME_compare(today_gen, today_gen), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(today_gen, today_utc), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(today_utc, today_gen), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(today_utc, today_utc), 0))
+        goto err;
 
-    /* Error return: malformed ASN1_TIME should produce -2. */
+    /* tomorrow == tomorrow across both representations */
+    if (!TEST_int_eq(ASN1_TIME_compare(tomorrow_gen, tomorrow_gen), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_gen, tomorrow_utc), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_utc, tomorrow_gen), 0)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_utc, tomorrow_utc), 0))
+        goto err;
+
+    /* today < tomorrow across both representations */
+    if (!TEST_int_eq(ASN1_TIME_compare(today_gen, tomorrow_gen), -1)
+        || !TEST_int_eq(ASN1_TIME_compare(today_gen, tomorrow_utc), -1)
+        || !TEST_int_eq(ASN1_TIME_compare(today_utc, tomorrow_gen), -1)
+        || !TEST_int_eq(ASN1_TIME_compare(today_utc, tomorrow_utc), -1))
+        goto err;
+
+    /* tomorrow > today across both representations */
+    if (!TEST_int_eq(ASN1_TIME_compare(tomorrow_gen, today_gen), 1)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_gen, today_utc), 1)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_utc, today_gen), 1)
+        || !TEST_int_eq(ASN1_TIME_compare(tomorrow_utc, today_utc), 1))
+        goto err;
+
+    /*
+     * Error return: a generalized-time string (15 chars) in a UTCTIME
+     * container is a type mismatch that should produce -2.
+     */
     if (!TEST_ptr(bad = ASN1_STRING_type_new(V_ASN1_UTCTIME))
-        || !TEST_true(ASN1_STRING_set(bad, "not-a-time", 10)))
+        || !TEST_true(ASN1_STRING_set(bad, "20260423171736Z", 15)))
         goto err;
-    if (!TEST_int_eq(ASN1_TIME_compare(bad, times[0]), -2)
-        || !TEST_int_eq(ASN1_TIME_compare(times[0], bad), -2))
+    if (!TEST_int_eq(ASN1_TIME_compare(bad, today_gen), -2)
+        || !TEST_int_eq(ASN1_TIME_compare(today_gen, bad), -2))
         goto err;
 
-    /* Limit values: min POSIX time < today < max POSIX time. */
+    /* Limit values: min generalized time < today < max generalized time. */
     if (!TEST_ptr(min = make_asn1_time("00000101000000Z",
                       V_ASN1_GENERALIZEDTIME))
         || !TEST_ptr(max = make_asn1_time("99991231235959Z",
@@ -931,14 +936,16 @@ static int test_asn1_time_compare(void)
     if (!TEST_int_eq(ASN1_TIME_compare(min, max), -1)
         || !TEST_int_eq(ASN1_TIME_compare(max, min), 1)
         || !TEST_int_eq(ASN1_TIME_compare(min, min), 0)
-        || !TEST_int_eq(ASN1_TIME_compare(min, times[0]), -1)
-        || !TEST_int_eq(ASN1_TIME_compare(max, times[0]), 1))
+        || !TEST_int_eq(ASN1_TIME_compare(min, today_gen), -1)
+        || !TEST_int_eq(ASN1_TIME_compare(max, today_gen), 1))
         goto err;
 
     ret = 1;
 err:
-    for (i = 0; i < OSSL_NELEM(times); i++)
-        ASN1_TIME_free(times[i]);
+    ASN1_TIME_free(today_gen);
+    ASN1_TIME_free(today_utc);
+    ASN1_TIME_free(tomorrow_gen);
+    ASN1_TIME_free(tomorrow_utc);
     ASN1_TIME_free(bad);
     ASN1_TIME_free(min);
     ASN1_TIME_free(max);
