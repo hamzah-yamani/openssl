@@ -328,7 +328,6 @@ ASN1_INTEGER *ossl_c2i_ASN1_INTEGER(ASN1_INTEGER **a, const unsigned char **pp,
 
     c2i_ibuf(tmp, &neg, *pp, len);
     ASN1_STRING_set0(ret, tmp, (int)r);
-    tmp = NULL;
 
     if (neg != 0)
         ret->type |= V_ASN1_NEG;
@@ -340,7 +339,6 @@ ASN1_INTEGER *ossl_c2i_ASN1_INTEGER(ASN1_INTEGER **a, const unsigned char **pp,
         (*a) = ret;
     return ret;
 err:
-    OPENSSL_free(tmp);
     if (a == NULL || *a != ret)
         ASN1_INTEGER_free(ret);
     return NULL;
@@ -520,10 +518,8 @@ static ASN1_STRING *bn_to_asn1_string(const BIGNUM *bn, ASN1_STRING *ai,
     if (!BN_is_zero(bn))
         len = BN_bn2bin(bn, tmp);
     ASN1_STRING_set0(ret, tmp, len);
-    tmp = NULL;
     return ret;
 err:
-    OPENSSL_free(tmp);
     if (ret != ai)
         ASN1_INTEGER_free(ret);
     return NULL;

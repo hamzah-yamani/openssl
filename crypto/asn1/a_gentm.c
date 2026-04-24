@@ -44,7 +44,7 @@ int ASN1_GENERALIZEDTIME_set_string(ASN1_GENERALIZEDTIME *s, const char *str)
     if ((len = strlen(str)) >= INT_MAX)
         return 0;
 
-    if ((t = ASN1_STRING_type_new(V_ASN1_GENERALIZEDTIME)) == NULL)
+    if ((t = ASN1_GENERALIZEDTIME_new()) == NULL)
         return 0;
 
     if (!ASN1_STRING_set(t, str, (int)len))

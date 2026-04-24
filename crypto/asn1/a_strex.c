@@ -130,13 +130,13 @@ static int do_esc_char(unsigned long c, unsigned short flags, char *do_quotes,
  * appropriate.
  */
 
-static int do_buf(unsigned char *buf, int buflen,
+static int do_buf(const unsigned char *buf, int buflen,
     int type, unsigned short flags, char *quotes, char_io *io_ch,
     void *arg)
 {
     int i, outlen, len, charwidth;
     unsigned short orflags;
-    unsigned char *p, *q;
+    const unsigned char *p, *q;
     unsigned long c;
 
     p = buf;
@@ -388,7 +388,7 @@ static int do_print_ex(char_io *io_ch, void *arg, unsigned long lflags,
             type |= BUF_TYPE_CONVUTF8;
     }
 
-    len = do_buf((unsigned char *)ASN1_STRING_get0_data(str),
+    len = do_buf(ASN1_STRING_get0_data(str),
         ASN1_STRING_length(str), type, flags, &quotes, io_ch, NULL);
     if (len < 0 || len > INT_MAX - 2 - outlen)
         return -1;
@@ -399,7 +399,7 @@ static int do_print_ex(char_io *io_ch, void *arg, unsigned long lflags,
         return outlen;
     if (quotes && !io_ch(arg, "\"", 1))
         return -1;
-    if (do_buf((unsigned char *)ASN1_STRING_get0_data(str),
+    if (do_buf(ASN1_STRING_get0_data(str),
             ASN1_STRING_length(str), type, flags, NULL, io_ch, arg)
         < 0)
         return -1;

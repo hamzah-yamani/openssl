@@ -163,6 +163,7 @@ static X509_ALGOR *pkcs5_scrypt_set(const unsigned char *salt, int saltlen,
 {
     X509_ALGOR *keyfunc = NULL;
     SCRYPT_PARAMS *sparam = SCRYPT_PARAMS_new();
+    unsigned char *tmp = NULL;
 
     if (sparam == NULL) {
         ERR_raise(ERR_LIB_ASN1, ERR_R_ASN1_LIB);
@@ -172,14 +173,18 @@ static X509_ALGOR *pkcs5_scrypt_set(const unsigned char *salt, int saltlen,
     if (!saltlen)
         saltlen = PKCS5_DEFAULT_PBE2_SALT_LEN;
 
-    /* This will either copy salt or grow the buffer */
-    if (ASN1_STRING_set(sparam->salt, salt, saltlen) == 0) {
+    if ((tmp = OPENSSL_malloc(saltlen)) == NULL) {
         ERR_raise(ERR_LIB_ASN1, ERR_R_ASN1_LIB);
         goto err;
     }
 
-    if (salt == NULL && RAND_bytes(sparam->salt->data, saltlen) <= 0)
+    if (salt != NULL) {
+        memcpy(tmp, salt, saltlen);
+    } else if (RAND_bytes(tmp, saltlen) <= 0) {
+        OPENSSL_free(tmp);
         goto err;
+    }
+    ASN1_STRING_set0(sparam->salt, tmp, saltlen);
 
     if (ASN1_INTEGER_set_uint64(sparam->costParameter, N) == 0) {
         ERR_raise(ERR_LIB_ASN1, ERR_R_ASN1_LIB);
